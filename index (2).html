@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gemini OS - Clean Edition</title>
+    <style>
+        :root {
+            --bg: #050508;
+            --panel: rgba(25, 25, 35, 0.95);
+            --neon: #00f2ff;
+            --accent: #ff007f;
+            --warning: #ffbb00;
+            --glass: rgba(255, 255, 255, 0.03);
+        }
+
+        body {
+            margin: 0; background: var(--bg);
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; font-family: 'Segoe UI', sans-serif;
+            overflow: hidden; touch-action: none;
+        }
+
+        /* --- УВЕДОМЛЕНИЕ --- */
+        #alert-box {
+            position: absolute; top: -100px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 0, 127, 0.2);
+            border: 1px solid var(--accent);
+            color: #fff; padding: 12px 20px;
+            border-radius: 15px; backdrop-filter: blur(10px);
+            z-index: 3000; font-size: 0.9rem; font-weight: bold;
+            box-shadow: 0 0 20px rgba(255, 0, 127, 0.4);
+            transition: top 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none; text-align: center; width: 280px;
+        }
+        #alert-box.show { top: 20px; }
+
+        /* --- ЗАСТАВКА --- */
+        #start-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg); z-index: 1000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            transition: 0.6s ease;
+        }
+        .logo { font-size: 3rem; color: var(--neon); text-shadow: 0 0 20px var(--neon); margin-bottom: 30px; font-weight: 800; letter-spacing: 5px; }
+        .start-btn {
+            background: transparent; color: var(--neon); border: 2px solid var(--neon);
+            padding: 15px 50px; border-radius: 50px; cursor: pointer; font-weight: bold;
+            box-shadow: 0 0 15px rgba(0,242,255,0.2); transition: 0.3s;
+        }
+
+        /* --- МЕНЮ (ОЧИЩЕНО) --- */
+        #menu-btn { position: absolute; top: 20px; right: 20px; z-index: 100; color: var(--neon); font-size: 1.5rem; cursor: pointer; display:none; }
+        #settings-panel {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: none; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 2000; backdrop-filter: blur(15px);
+        }
+
+        /* --- КАЛЬКУЛЯТОР --- */
+        #particleCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+        .calculator {
+            position: relative; z-index: 10;
+            background: var(--panel); backdrop-filter: blur(25px);
+            padding: 25px; border-radius: 40px; border: 1px solid rgba(255, 255, 255, 0.1);
+            width: 320px; box-shadow: 0 30px 60px rgba(0,0,0,0.8);
+            display: none; animation: fadeIn 0.5s forwards;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        #display-container {
+            position: relative; width: 100%; margin-bottom: 20px;
+            background: #000; border-radius: 20px; padding: 5px;
+            box-shadow: inset 0 2px 15px rgba(0,0,0,1); overflow: hidden;
+        }
+        #display {
+            width: 100%; height: 90px; background: linear-gradient(180deg, #0d0d14 0%, #050505 100%);
+            border: none; outline: none; color: var(--neon); font-size: 2.8rem;
+            text-align: right; padding: 25px 15px 5px 15px; box-sizing: border-box;
+            font-family: 'Courier New', monospace; text-shadow: 0 0 15px rgba(0, 242, 255, 0.7);
+            transition: font-size 0.2s; white-space: nowrap;
+        }
+        .scanlines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: repeating-linear-gradient(rgba(0,0,0,0) 0px, rgba(0,0,0,0) 1px, rgba(0,0,0,0.1) 2px); pointer-events: none; z-index: 4; }
+
+        .buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        button {
+            height: 60px; border: none; border-radius: 18px;
+            background: var(--glass); color: #fff; font-size: 1.3rem; font-weight: 600;
+            cursor: pointer; transition: 0.2s; -webkit-tap-highlight-color: transparent;
+        }
+        button:active { transform: scale(0.92); background: rgba(255,255,255,0.1); }
+        .operator { color: var(--accent); background: rgba(255, 0, 127, 0.12); }
+        .backspace { color: var(--warning); background: rgba(255, 187, 0, 0.12); font-size: 1.5rem; }
+        .equal { grid-column: span 2; background: linear-gradient(45deg, var(--neon), #0072ff); font-size: 2rem; box-shadow: 0 0 15px rgba(0, 242, 255, 0.3); }
+    </style>
+</head>
+<body>
+
+<div id="alert-box">⚠️ Лимит: 15 цифр подряд! <br> Введите оператор (+, -, ×, ÷)</div>
+
+<div id="start-screen">
+    <div class="logo">GEMINI OS</div>
+    <button class="start-btn" onclick="bootSystem()">BOOT SYSTEM</button>
+</div>
+
+<div id="menu-btn" onclick="toggleMenu()">⚙️</div>
+
+<div id="settings-panel">
+    <div style="background:var(--panel); padding:30px; border-radius:30px; width:80%; text-align:center; border:1px solid var(--neon)">
+        <h2 style="color:var(--neon)">ОПЦИИ</h2>
+        <p style="color:#fff; opacity:0.6; font-size:0.9rem;">Здесь скоро появятся новые функции...</p>
+        <button class="start-btn" style="margin-top:20px; border-color:var(--accent); color:var(--accent)" onclick="toggleMenu()">ЗАКРЫТЬ</button>
+    </div>
+</div>
+
+<canvas id="particleCanvas"></canvas>
+
+<div class="calculator" id="calc-body">
+    <div id="display-container">
+        <div id="mode-indicator" style="position:absolute; top:8px; left:12px; color:var(--neon); font-size:0.6rem; z-index:10; font-weight:bold; opacity:0.6;">SYSTEM V.6.0 | READY</div>
+        <div class="scanlines"></div>
+        <input type="text" id="display" value="0" readonly>
+    </div>
+    <div class="buttons">
+        <button onclick="reset(event)" class="operator">AC</button>
+        <button onclick="backspace(event)" class="backspace">⌫</button>
+        <button onclick="press('/', event, true)" class="operator">÷</button>
+        <button onclick="press('*', event, true)" class="operator">×</button>
+        
+        <button onclick="press('7', event)">7</button>
+        <button onclick="press('8', event)">8</button>
+        <button onclick="press('9', event)">9</button>
+        <button onclick="press('-', event, true)" class="operator">−</button>
+
+        <button onclick="press('4', event)">4</button>
+        <button onclick="press('5', event)">5</button>
+        <button onclick="press('6', event)">6</button>
+        <button onclick="press('+', event, true)" class="operator">+</button>
+
+        <button onclick="press('1', event)">1</button>
+        <button onclick="press('2', event)">2</button>
+        <button onclick="press('3', event)">3</button>
+        <button onclick="press('.', event)">.</button>
+
+        <button onclick="press('0', event)" style="grid-column: span 2;">0</button>
+        <button onclick="solve(event)" class="equal">=</button>
+    </div>
+</div>
+
+<script>
+    const view = document.getElementById('display');
+    const alertBox = document.getElementById('alert-box');
+    const canvas = document.getElementById('particleCanvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let currentNumLength = 0;
+    let alertTimer;
+
+    function bootSystem() {
+        document.getElementById('start-screen').style.opacity = '0';
+        setTimeout(() => {
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('calc-body').style.display = 'block';
+            document.getElementById('menu-btn').style.display = 'block';
+        }, 600);
+    }
+
+    function backspace(e) {
+        createExplosion(e, '#ffbb00');
+        if (view.value === "0" || view.value === "Ошибка") return;
+        
+        view.value = view.value.slice(0, -1);
+        if (view.value === "" || view.value === "-") view.value = "0";
+        
+        const matches = view.value.split(/[\+\-\*\/]/);
+        const lastPart = matches[matches.length - 1];
+        currentNumLength = lastPart.replace('.', '').length;
+
+        hideAlert();
+        adjustFontSize();
+    }
+
+    function toggleMenu() {
+        const p = document.getElementById('settings-panel');
+        p.style.display = (p.style.display === 'flex') ? 'none' : 'flex';
+    }
+
+    function adjustFontSize() {
+        const l = view.value.length;
+        if (l <= 8) view.style.fontSize = "2.8rem";
+        else if (l <= 12) view.style.fontSize = "2.2rem";
+        else if (l <= 16) view.style.fontSize = "1.7rem";
+        else view.style.fontSize = "1.3rem";
+    }
+
+    function press(val, e, isOperator = false) {
+        createExplosion(e, isOperator ? '#ff007f' : '#00f2ff');
+        
+        if (isOperator) {
+            hideAlert();
+            currentNumLength = 0;
+            const lastChar = view.value.slice(-1);
+            if (['+', '-', '*', '/'].includes(lastChar)) {
+                view.value = view.value.slice(0, -1) + val;
+            } else {
+                view.value += val;
+            }
+        } else {
+            if (val === '.') {
+                const parts = view.value.split(/[\+\-\*\/]/);
+                const currentPart = parts[parts.length - 1];
+                if (currentPart.includes('.')) return;
+                if (currentPart === "" || view.value === "0") {
+                   if(view.value === "0") view.value = "0.";
+                   else view.value += "0.";
+                   currentNumLength++;
+                   adjustFontSize();
+                   return;
+                }
+            }
+
+            if (currentNumLength >= 15) {
+                showAlert();
+                return; 
+            }
+
+            if (view.value === "0" && val !== '.') view.value = val;
+            else if (view.value === "Ошибка") view.value = val;
+            else view.value += val;
+            
+            if (val !== '.') currentNumLength++;
+        }
+        adjustFontSize();
+    }
+
+    function reset(e) {
+        hideAlert();
+        createExplosion(e, '#ffbb00');
+        view.value = "0";
+        currentNumLength = 0;
+        adjustFontSize();
+    }
+
+    function solve(e) {
+        hideAlert();
+        createExplosion(e, '#00f2ff');
+        try {
+            if (!view.value) return;
+            let res = Function('"use strict";return (' + view.value + ')')();
+            // Показываем до 8 знаков, но убираем лишние нули в конце
+            view.value = parseFloat(res.toFixed(8)).toString();
+            currentNumLength = view.value.replace(/[^0-9]/g, '').length;
+            adjustFontSize();
+        } catch { view.value = "Ошибка"; }
+    }
+
+    function showAlert() {
+        alertBox.classList.add('show');
+        clearTimeout(alertTimer);
+        alertTimer = setTimeout(() => alertBox.classList.remove('show'), 2500);
+    }
+
+    function hideAlert() { alertBox.classList.remove('show'); }
+
+    // --- ЧАСТИЦЫ ---
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    window.addEventListener('resize', resize); resize();
+    class Particle {
+        constructor(x, y, color) {
+            this.x = x; this.y = y; this.color = color;
+            this.size = Math.random() * 3 + 1;
+            this.speedX = (Math.random() - 0.5) * 8;
+            this.speedY = (Math.random() - 0.5) * 8;
+            this.life = 1; this.decay = 0.03;
+        }
+        update() { this.x += this.speedX; this.y += this.speedY; this.life -= this.decay; }
+        draw() { ctx.fillStyle = this.color; ctx.globalAlpha = this.life; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill(); }
+    }
+    function createExplosion(e, color) {
+        const rect = e.target.getBoundingClientRect();
+        const x = rect.left + rect.width/2;
+        const y = rect.top + rect.height/2;
+        for(let i=0; i<8; i++) particles.push(new Particle(x, y, color));
+    }
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach((p, i) => {
+            p.update(); p.draw();
+            if (p.life <= 0) particles.splice(i, 1);
+        });
+        requestAnimationFrame(animate);
+    }
+    animate();
+</script>
+</body>
+</html>
